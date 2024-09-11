@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Animated } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, ScrollView } from 'react-native';
 import io from 'socket.io-client';
 import { Table, Row, Rows } from 'react-native-table-component';
 
@@ -19,14 +19,12 @@ const MachineScreen = () => {
 		// Listen for 'initial_data' event
 		socket.on('initial_data', (dataList) => {
 			if (!inited) { // เวลามี client ใหม่ ไป connect server จะ emit ตัวนี้มาตลอดทุกครั้ง
-				setTableData(dataList);
-				setSinceTimes(
-					dataList.map((data) => ({
-						machine: data.machine,
-						fromDate: data.fromDate,
-						since: calculateSinceTime(data.fromDate),
-					}))
-				);
+				const dataWithAnimations = dataList.map((data) => ({
+					...data,
+					since: calculateSinceTime(data.fromDate),
+					animatedValue: new Animated.Value(0),
+				}));
+				setTableData(dataWithAnimations);
 				setInited(true);
 			}
 		});
@@ -70,37 +68,45 @@ const MachineScreen = () => {
 	}, []);
 
 	const handleUpdate = (updateData, type) => {
-		// Recalculate since times and update the table
-		const updatedData = tableData.map((data) => {
-			if (data.machine === updateData.machine) {
-				const newData = { ...data, ...updateData };
-				if (type === 'status') {
-					newData.since = calculateSinceTime(newData.fromDate);
+		setTableData((prevData) =>
+			prevData.map((data) => {
+				if (data.machine === updateData.machine) {
+					const hasChanged = data[type] !== updateData[type];
+					const newData = { ...data, ...updateData }; //Merges the existing data with the new data, effectively updating the fields specified in updateData.
+
+					if (type === 'status' && updateData.fromDate && hasChanged) {
+						newData.since = calculateSinceTime(updateData.fromDate);
+						newData.fromDate = updateData.fromDate;
+					}
+
+					if (hasChanged) { // Can be both status and count
+						triggerAnimation(newData.animatedValue);
+					}
+
+					return newData;
 				}
-				triggerAnimation();
-				return newData;
-			}
-			return data;
-		});
-		setTableData(updatedData);
+				return data;
+			})
+		);
 	};
 
-	const triggerAnimation = () => {
+	const triggerAnimation = (animatedValue) => {
 		Animated.sequence([
 			Animated.timing(animatedValue, {
 				toValue: 1,
-				duration: 200,
+				duration: 400,
 				useNativeDriver: false,
 			}),
 			Animated.timing(animatedValue, {
 				toValue: 0,
-				duration: 200,
+				duration: 400,
 				useNativeDriver: false,
 			}),
 		]).start();
 	};
 
 	const calculateSinceTime = (fromDate) => {
+		if (!fromDate) return 'N/A';
 		const now = new Date();
 		const pastDate = new Date(fromDate);
 		const difference = Math.floor((now - pastDate) / (1000 * 60)); // in minutes
@@ -130,35 +136,76 @@ const MachineScreen = () => {
 		screenWidth * 0.08,  // % for Line
 		screenWidth * 0.30,  // % for Status
 		screenWidth * 0.20,  // % for Since
-		screenWidth * 0.12   // % for Count
+		screenWidth * 0.15   // % for Count
 	];
 
 	return (
 		<View style={styles.container}>
-			<Text style={styles.title}>Machine Real-Time Status</Text>
-			<Text style={styles.clock}>{clock}</Text>
-			<Table borderStyle={{ borderWidth: 1, borderColor: '#c8e1ff' }}>
+			{/* Title and Clock in the same row */}
+			<View style={styles.header}>
+				<Text style={styles.title}>Machine Real-Time Status</Text>
+				<Text style={styles.clock}>{clock}</Text>
+			</View>
+
+			<Table >
 				<Row
-					data={['', 'Machine', 'Line', 'Status', 'For', 'Count']}
+					data={['', 'Machine', 'Line', 'Status', 'Since', 'Count']}
 					style={styles.head}
 					textStyle={styles.text}
-					widthArr={widthArr} // Apply the width array here
+					widthArr={widthArr}
 				/>
-				<Rows
-					data={tableData.map((row, index) => [
-						<View style={[styles.statusCircle, { backgroundColor: statusDefinitions[row.status]?.color || '#A9A9A9' }]} />,
-						row.machine,
-						row.line,
-						<Text style={{ color: statusDefinitions[row.status]?.color, padding: 2 }}>
-							{statusDefinitions[row.status]?.text || 'Unknown'}
-						</Text>,
-						row.since,
-						row.count,
-					])}
-					textStyle={styles.text}
-					widthArr={widthArr} // Apply the width array here
-				/>
-			</Table>
+			</Table >
+
+			<ScrollView style={styles.scrollContainer}>
+				<Table >
+					{tableData.map((rowData, index) => {
+						const rowBackgroundColor = rowData.animatedValue.interpolate({
+							inputRange: [0, 1],
+							outputRange: ['transparent', '#8f8f5e'],
+						});
+
+						return (
+							<Animated.View
+								key={index}
+								style={{ backgroundColor: rowBackgroundColor }}
+							>
+								<Row
+									data={[
+										// Status circle
+										<View
+											style={[
+												styles.statusCircle,
+												{
+													backgroundColor:
+														statusDefinitions[rowData.status]?.color || '#A9A9A9',
+												},
+											]}
+										/>,
+										rowData.machine,
+										rowData.line,
+										// Status text with color
+										<Text
+											style={{
+												color: statusDefinitions[rowData.status]?.color,
+											}}
+										>
+											{statusDefinitions[rowData.status]?.text || 'Unknown'}
+										</Text>,
+										rowData.since,
+										rowData.count || 'N/A',
+									]}
+									textStyle={styles.text}
+									widthArr={widthArr}
+								/>
+								{/* Add a separator line after machine 6 and machine 13 */}
+								{index === 5 || index === 12 ? (
+									<View style={styles.separator} />
+								) : null}
+							</Animated.View>
+						);
+					})}
+				</Table>
+			</ScrollView>
 		</View>
 	);
 };
@@ -166,22 +213,28 @@ const MachineScreen = () => {
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
-		backgroundColor: '#1e1e1e',
+		backgroundColor: '#1e1e1e', // Dark theme
 		padding: 16,
-		justifyContent: 'center',
+		paddingTop: 10,
+	},
+	header: {
+		flexDirection: 'row', // Align children in a row
+		justifyContent: 'space-between', // Push title and clock to opposite sides
+		alignItems: 'center', // Align items vertically in the center
+		marginBottom: 5,
 	},
 	title: {
-		fontSize: 24,
+		fontSize: 20,
 		fontWeight: 'bold',
 		color: '#ffffff',
 		textAlign: 'center',
-		marginBottom: 20,
+		// marginBottom: 10,
 	},
 	clock: {
 		color: '#ffffff',
-		fontSize: 18,
+		fontSize: 16,
 		position: 'absolute',
-		top: 10,
+		// top: 10,
 		right: 10,
 	},
 	head: {
@@ -195,9 +248,17 @@ const styles = StyleSheet.create({
 	statusCircle: {
 		width: 20,
 		height: 20,
-		// borderRadius: 5,
+		borderRadius: 10,
+		margin: 3,
+	},
+	separator: {
+		height: 1,           // Thickness of the separator
+		backgroundColor: '#ffffff',  // Color of the separator
+		marginVertical: 10,   // Space above and below the line
+	},
+	scrollContainer: {
+		marginBottom: 5, // Adjust this if you have a footer
 	},
 });
-
 
 export default MachineScreen;
