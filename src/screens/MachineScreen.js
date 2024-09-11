@@ -1,136 +1,203 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated } from 'react-native';
 import io from 'socket.io-client';
 import { Table, Row, Rows } from 'react-native-table-component';
 
-// MachineScreen component
+const screenWidth = Dimensions.get('window').width;
+
 const MachineScreen = () => {
-	const [machineData, setMachineData] = useState([]);
+	const [tableData, setTableData] = useState([]);
 	const [sinceTimes, setSinceTimes] = useState([]);
+	const [clock, setClock] = useState('');
+	const [animatedValue] = useState(new Animated.Value(0));
+	const [inited, setInited] = useState(false);
 
-	// Calculate the "since" column based on the fromDate
-	const calculateSinceTime = (fromDate) => {
-		const currentTime = new Date();
-		const previousTime = new Date(fromDate);
-		const timeDiff = Math.floor((currentTime - previousTime) / 1000 / 60); // Time diff in minutes
-		return timeDiff;
-	};
-
-	// Update the "since" times every minute
 	useEffect(() => {
-		const intervalId = setInterval(() => {
-			setSinceTimes((prevTimes) =>
-				prevTimes.map(({ fromDate }) => calculateSinceTime(fromDate))
-			);
-		}, 60000); // Every minute
-
-		return () => clearInterval(intervalId);
-	}, []);
-
-	// Handle incoming socket data
-	useEffect(() => {
-		// Connect to the Socket.IO server
-		const socket = io('http://192.168.1.43:5010');
+		// Initialize WebSocket connection
+		const socket = io('ws://192.168.1.43:5010');
 
 		// Listen for 'initial_data' event
 		socket.on('initial_data', (dataList) => {
+			if (!inited) { // เวลามี client ใหม่ ไป connect server จะ emit ตัวนี้มาตลอดทุกครั้ง
+				setTableData(dataList);
+				setSinceTimes(
+					dataList.map((data) => ({
+						machine: data.machine,
+						fromDate: data.fromDate,
+						since: calculateSinceTime(data.fromDate),
+					}))
+				);
+				setInited(true);
+			}
+		});
 
-			setMachineData(dataList);
-			setSinceTimes(
-				dataList.map((data) => ({
-					machine: data.machine,
-					fromDate: data.fromDate,
+		// Listen for 'update_status' and 'update_count' events
+		socket.on('update_status', (updateData) => {
+			handleUpdate(updateData, 'status');
+		});
+		socket.on('update_count', (updateData) => {
+			handleUpdate(updateData, 'count');
+		});
+
+		// Clock update every second
+		const clockInterval = setInterval(() => {
+			const currentTime = new Date();
+			setClock(
+				`${currentTime.getHours().toString().padStart(2, '0')}:${currentTime
+					.getMinutes()
+					.toString()
+					.padStart(2, '0')}:${currentTime
+						.getSeconds()
+						.toString()
+						.padStart(2, '0')}`
+			);
+		}, 1000);
+
+		const intervalId = setInterval(() => {
+			setTableData((prevData) =>
+				prevData.map((data) => ({
+					...data,
 					since: calculateSinceTime(data.fromDate),
 				}))
 			);
-		});
+		}, 60000); // Every minute
 
-		// Listen for 'update_status' event
-		socket.on('update_status', (updatedData) => {
-			setMachineData((prevData) =>
-				prevData.map((machine) =>
-					machine.machine === updatedData.machine
-						? { ...machine, ...updatedData }
-						: machine
-				)
-			);
-		});
-
-		// Listen for 'update_count' event
-		socket.on('update_count', (updatedData) => {
-			setMachineData((prevData) =>
-				prevData.map((machine) =>
-					machine.machine === updatedData.machine
-						? { ...machine, count: updatedData.count }
-						: machine
-				)
-			);
-		});
-
-		// Clean up the socket connection
-		return () => socket.disconnect();
+		return () => {
+			clearInterval(intervalId);
+			clearInterval(clockInterval);
+			socket.disconnect();
+		};
 	}, []);
 
-	// Prepare table data
-	const tableData = machineData.map((machine) => {
-		const sinceTime = sinceTimes.find((since) => since.machine === machine.machine)?.since || 'N/A';
-		return [
-			machine.machine,
-			machine.line,
-			machine.status,
-			sinceTime,
-			machine.count || 'N/A', // Count may not be available in some updates
-		];
-	});
+	const handleUpdate = (updateData, type) => {
+		// Recalculate since times and update the table
+		const updatedData = tableData.map((data) => {
+			if (data.machine === updateData.machine) {
+				const newData = { ...data, ...updateData };
+				if (type === 'status') {
+					newData.since = calculateSinceTime(newData.fromDate);
+				}
+				triggerAnimation();
+				return newData;
+			}
+			return data;
+		});
+		setTableData(updatedData);
+	};
+
+	const triggerAnimation = () => {
+		Animated.sequence([
+			Animated.timing(animatedValue, {
+				toValue: 1,
+				duration: 200,
+				useNativeDriver: false,
+			}),
+			Animated.timing(animatedValue, {
+				toValue: 0,
+				duration: 200,
+				useNativeDriver: false,
+			}),
+		]).start();
+	};
+
+	const calculateSinceTime = (fromDate) => {
+		const now = new Date();
+		const pastDate = new Date(fromDate);
+		const difference = Math.floor((now - pastDate) / (1000 * 60)); // in minutes
+		return difference >= 0 ? `${difference} min` : 'N/A';
+	};
+
+	const statusDefinitions = {
+		200: { text: 'Running', color: '#83CC21' },
+		210: { text: 'Idle', color: '#F9F733' },
+		220: { text: 'Setup', color: '#00C3FF' },
+		230: { text: 'Wait Material', color: '#FFA500' },
+		300: { text: 'Maintenance', color: '#A66DD0' },
+		310: { text: 'Calibration', color: '#808080' },
+		320: { text: 'Break', color: '#1E90FF' },
+		330: { text: 'Shift Change', color: '#17AF91' },
+		400: { text: 'Machine Down', color: '#ED6112' },
+		410: { text: 'Power Failure', color: '#FF0000' },
+		420: { text: 'Emergency Stop', color: '#FF6347' },
+		430: { text: 'Quality Issue', color: '#8B0000' },
+		440: { text: 'Oper Absence', color: '#FF410C' },
+		500: { text: 'No Connection', color: '#A9A9A9' },
+	};
+
+	const widthArr = [
+		20,  // 20 pixel fixed for Circle
+		screenWidth * 0.15,  // % for Machine
+		screenWidth * 0.08,  // % for Line
+		screenWidth * 0.30,  // % for Status
+		screenWidth * 0.20,  // % for Since
+		screenWidth * 0.12   // % for Count
+	];
 
 	return (
 		<View style={styles.container}>
 			<Text style={styles.title}>Machine Real-Time Status</Text>
+			<Text style={styles.clock}>{clock}</Text>
 			<Table borderStyle={{ borderWidth: 1, borderColor: '#c8e1ff' }}>
 				<Row
-					data={['Machine', 'Line', 'Status', 'For', 'Count']}
+					data={['', 'Machine', 'Line', 'Status', 'For', 'Count']}
 					style={styles.head}
-					textStyle={styles.text} // Provide an empty object here
+					textStyle={styles.text}
+					widthArr={widthArr} // Apply the width array here
 				/>
-				<Rows data={tableData} textStyle={styles.text} />
+				<Rows
+					data={tableData.map((row, index) => [
+						<View style={[styles.statusCircle, { backgroundColor: statusDefinitions[row.status]?.color || '#A9A9A9' }]} />,
+						row.machine,
+						row.line,
+						<Text style={{ color: statusDefinitions[row.status]?.color, padding: 2 }}>
+							{statusDefinitions[row.status]?.text || 'Unknown'}
+						</Text>,
+						row.since,
+						row.count,
+					])}
+					textStyle={styles.text}
+					widthArr={widthArr} // Apply the width array here
+				/>
 			</Table>
 		</View>
 	);
 };
 
-// Styles for the screen
 const styles = StyleSheet.create({
 	container: {
 		flex: 1,
+		backgroundColor: '#1e1e1e',
 		padding: 16,
-		paddingTop: 30,
-		backgroundColor: '#000',
+		justifyContent: 'center',
 	},
 	title: {
-		fontSize: 20,
+		fontSize: 24,
 		fontWeight: 'bold',
+		color: '#ffffff',
 		textAlign: 'center',
 		marginBottom: 20,
-		color: 'white',
+	},
+	clock: {
+		color: '#ffffff',
+		fontSize: 18,
+		position: 'absolute',
+		top: 10,
+		right: 10,
 	},
 	head: {
 		height: 40,
-		backgroundColor: '#2e2e2e',
+		backgroundColor: '#333333',
 	},
 	text: {
-		marginTop: 2,
-		marginBottom: 2,
+		color: '#ffffff',
 		textAlign: 'center',
-		color: 'white',
 	},
-	tableBorder: {
-		borderColor: '#555555', // Subtle contrast for borders
-		borderWidth: 1,
-	},
-	tableRow: {
-		height: 40,
-		backgroundColor: '#2a2a2a', // Darker row background
+	statusCircle: {
+		width: 20,
+		height: 20,
+		// borderRadius: 5,
 	},
 });
+
 
 export default MachineScreen;
