@@ -1,0 +1,55 @@
+queries = {
+    'stationList' : """"
+SELECT nextStation
+FROM (
+    SELECT nextStation, MIN(step) as minStep
+    FROM flow
+    GROUP BY nextStation
+) AS distinctStations
+ORDER BY minStep
+""",
+
+    'waitingIncoming_1': """
+SELECT orderId
+FROM customer_order_progress
+WHERE nextStation = :nextStation""",
+
+    'orderDetailsFromId': """
+SELECT * 
+FROM customer_order
+WHERE orderId = :orderId""",
+
+    'orderInputQty': """
+SELECT qty
+FROM customer_order_progress
+WHERE nextStation = :nextStation
+AND orderId = :orderId""",
+
+    'stationQty': """
+SELECT qty, cum_qty
+FROM customer_order_progress
+WHERE orderId = :orderId
+AND station = :station
+AND transaction_type = :type""",
+
+    'previousStation': """
+SELECT station 
+FROM flow
+WHERE nextStation = :nextStation
+AND productModel = :productModel
+AND productName = :productName""",
+
+    'writeUpdateQty': """
+INSERT INTO customer_order_progress (transaction_type, orderId, station, nextStation, qty, cum_qty)
+VALUES (:type, :orderId, :station, :nextStation, :qty, :cum_qty)
+ON DUPLICATE KEY UPDATE
+qty = VALUES(qty),
+cum_qty = VALUES(cum_qty);""",
+
+    'nextStation': """
+SELECT nextStation 
+FROM flow
+WHERE station = :station
+AND productModel = :productModel
+AND productName = :productName"""
+}
