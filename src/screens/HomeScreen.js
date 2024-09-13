@@ -11,7 +11,9 @@ export default function HomeScreen() {
 	const { navigationParams, setNavigationParams } = useNavigationContext();
 
 	useEffect(() => {
-		setNavigationParams({ scannedData: '', source: '' });
+		if (isFocused) {
+			setNavigationParams(prev => ({ ...prev, latestPage: 'Home' }));
+		}
 	}, [isFocused]);
 
 	return (

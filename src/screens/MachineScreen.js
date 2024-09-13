@@ -19,7 +19,9 @@ const MachineScreen = () => {
 	const { navigationParams, setNavigationParams } = useNavigationContext();
 
 	useEffect(() => {
-		setNavigationParams({ scannedData: '', source: '' });
+		if (isFocused) {
+			setNavigationParams(prev => ({ ...prev, latestPage: 'Machine' }));
+		}
 	}, [isFocused]);
 
 	useEffect(() => {

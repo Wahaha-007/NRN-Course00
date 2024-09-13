@@ -32,8 +32,8 @@ export default function CameraScreen() {
 	}
 
 	function bcCallback(scanResult) {
-		setNavigationParams({ scannedData: scanResult.data, source: 'Camera' });
-		navigation.navigate('Scanner');
+		setNavigationParams(prev => ({ ...prev, scannedData: scanResult.data, latestPage: 'Camera' }));
+		navigation.navigate('ScannerMain');
 	}
 
 	return (

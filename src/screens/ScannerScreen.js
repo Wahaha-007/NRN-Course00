@@ -15,7 +15,7 @@ import axios from 'axios'; // Background Task
 export default function ScannerScreen({ route }) {
 
 	const { navigationParams, setNavigationParams } = useNavigationContext();
-	const { scannedData, source } = navigationParams;
+	const { scannedData, latestPage } = navigationParams;
 
 	const [station, setStation] = useState('A-01');
 	const [orderId, setOrderId] = useState('');
@@ -62,6 +62,12 @@ export default function ScannerScreen({ route }) {
 		setStlist([{ "label": "A-01", "value": "A-01" }, { "label": "A-02", "value": "A-02" }, { "label": "B-01", "value": "B-01" }, { "label": "B-02", "value": "B-02" }, { "label": "C-02", "value": "C-02" }, { "label": "C-01", "value": "C-01" }, { "label": "D-01", "value": "D-01" }, { "label": "D-02", "value": "D-02" }, { "label": "ST-02", "value": "ST-02" }, { "label": "ST-01", "value": "ST-01" }]);
 	}, []);
 
+
+	useEffect(() => {
+		console.log("Station change! in list to ", station);
+		setNavigationParams(prev => ({ ...prev, station: station }));
+	}, [station]);
+
 	// 2. ===================== Scanner Section ====================
 	// ขาไปหน้า Camera
 	const openScanner = () => {
@@ -74,7 +80,7 @@ export default function ScannerScreen({ route }) {
 
 	useEffect(() => {
 
-		if (isFocused && source == 'Camera') {
+		if (isFocused && latestPage == 'Camera') {
 
 			if (scannedData) {
 
@@ -160,17 +166,15 @@ export default function ScannerScreen({ route }) {
 						Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
 					}
 				};
-
 				fetchData(scannedData);
-
 			}
-			setNavigationParams({ scannedData: '', source: '' });
 		}
 
-		if (isFocused && source == 'Camera') {
-			console.log(scannedData);
+		if (isFocused) {
+			// console.log(scannedData);
+			setNavigationParams(prev => ({ ...prev, latestPage: 'ScannerMain' }));
 		}
-	}, [isFocused]); //, 
+	}, [isFocused]);
 
 	// 3. ========================= In/Out Textbox ===============================
 
