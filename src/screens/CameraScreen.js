@@ -1,16 +1,16 @@
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useState } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigationContext } from '../context/NavigationContext';
 
 export default function CameraScreen() {
+	const { setNavigationParams } = useNavigationContext();
+
 	const [facing, setFacing] = useState('back');
-	const [scanned, setScanned] = useState(false);
 	const [permission, requestPermission] = useCameraPermissions();
 
 	const navigation = useNavigation();
-	const route = useRoute();
-	// const { onScanComplete } = route.params;
 
 	if (!permission) {
 		// Camera permissions are still loading.
@@ -32,7 +32,8 @@ export default function CameraScreen() {
 	}
 
 	function bcCallback(scanResult) {
-		navigation.navigate('Scanner', { scannedData: scanResult.data });
+		setNavigationParams({ scannedData: scanResult.data, source: 'Camera' });
+		navigation.navigate('Scanner');
 	}
 
 	return (

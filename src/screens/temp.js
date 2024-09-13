@@ -1,238 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import {
-	View,
-	Text,
-	StyleSheet,
-	Animated,
-	Dimensions,
-} from 'react-native';
-import io from 'socket.io-client';
-import { Table, Row } from 'react-native-table-component';
+// 1.2 Data of Lot
+const message2 = {
+	queryName: 'orderDetailsFromId',
+	params: { "orderId": route.params.scannedData }
+}
+const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
+if (result2 && result2.data) {
+	console.log("Query result:", result2.data);
+	setCustomer(result2.data[0][2]);
+	setProduct(result2.data[0][4]);
+	setModel(result2.data[0][5]);
+}
 
-const screenWidth = Dimensions.get('window').width;
+// 1.3 Data of Input
+const message3 = {
+	queryName: 'orderInputQty',
+	params: { "orderId": route.params.scannedData, "nextStation": station }
+}
+const result3 = await axios.post('http://192.168.1.43:5011/query', message3);
+if (result3 && result3.data) {
+	console.log("Query result:", result3.data);
+	if (result3.data == []) setIncomingQty(0);
+	else setIncomingQty(result3.data[0][0]); // ระวังเรื่อง row = 0 ด้วย
+}
 
-const MachineScreen = () => {
-	const [tableData, setTableData] = useState([]);
-	const [clock, setClock] = useState('');
-
-	const widthArr = [
-		screenWidth * 0.1,  // Status Circle
-		screenWidth * 0.15, // Machine
-		screenWidth * 0.15, // Line
-		screenWidth * 0.25, // Status
-		screenWidth * 0.15, // Since
-		screenWidth * 0.2,  // Count
-	];
-
-	useEffect(() => {
-		const socket = io('http://192.168.1.43:5010');
-
-		// Handle 'initial_data'
-		socket.on('initial_data', (dataList) => {
-			const dataWithAnimations = dataList.map((data) => ({
-				...data,
-				since: calculateSinceTime(data.fromDate),
-				animatedValue: new Animated.Value(0),
-			}));
-			setTableData(dataWithAnimations);
-		});
-
-		// Handle updates
-		socket.on('update_status', (updateData) => {
-			handleUpdate(updateData, 'status');
-		});
-
-		socket.on('update_count', (updateData) => {
-			handleUpdate(updateData, 'count');
-		});
-
-		// Update clock every second
-		const clockInterval = setInterval(() => {
-			const currentTime = new Date();
-			setClock(
-				`${currentTime.getHours().toString().padStart(2, '0')}:${currentTime
-					.getMinutes()
-					.toString()
-					.padStart(2, '0')}:${currentTime
-						.getSeconds()
-						.toString()
-						.padStart(2, '0')}`
-			);
-		}, 1000);
-
-		// Update 'since' times every minute
-		const sinceInterval = setInterval(() => {
-			setTableData((prevData) =>
-				prevData.map((data) => ({
-					...data,
-					since: calculateSinceTime(data.fromDate),
-				}))
-			);
-		}, 60000);
-
-		return () => {
-			clearInterval(clockInterval);
-			clearInterval(sinceInterval);
-			socket.disconnect();
-		};
-	}, []);
-
-	const handleUpdate = (updateData, type) => {
-		setTableData((prevData) =>
-			prevData.map((data) => {
-				if (data.machine === updateData.machine) {
-					const hasChanged = data[type] !== updateData[type];
-					const newData = { ...data, ...updateData };
-
-					if (type === 'status' && updateData.fromDate) {
-						newData.since = calculateSinceTime(updateData.fromDate);
-						newData.fromDate = updateData.fromDate;
-					}
-
-					if (hasChanged) {
-						triggerAnimation(newData.animatedValue);
-					}
-
-					return newData;
-				}
-				return data;
-			})
-		);
-	};
-
-	const triggerAnimation = (animatedValue) => {
-		Animated.sequence([
-			Animated.timing(animatedValue, {
-				toValue: 1,
-				duration: 200,
-				useNativeDriver: false,
-			}),
-			Animated.timing(animatedValue, {
-				toValue: 0,
-				duration: 200,
-				useNativeDriver: false,
-			}),
-		]).start();
-	};
-
-	const calculateSinceTime = (fromDate) => {
-		if (!fromDate) return 'N/A';
-		const now = new Date();
-		const pastDate = new Date(fromDate);
-		const difference = Math.floor((now - pastDate) / (1000 * 60)); // in minutes
-		return difference >= 0 ? `${difference} min` : 'N/A';
-	};
-
-	const statusDefinitions = {
-		200: { text: 'Running', color: '#83CC21' },
-		210: { text: 'Idle', color: '#F9F733' },
-		220: { text: 'Setup', color: '#00C3FF' },
-		230: { text: 'Wait Material', color: '#FFA500' },
-		300: { text: 'Maintenance', color: '#A66DD0' },
-		310: { text: 'Calibration', color: '#808080' },
-		320: { text: 'Break', color: '#1E90FF' },
-		330: { text: 'Shift Change', color: '#17AF91' },
-		400: { text: 'Machine Down', color: '#ED6112' },
-		410: { text: 'Power Failure', color: '#FF0000' },
-		420: { text: 'Emergency Stop', color: '#FF6347' },
-		430: { text: 'Quality Issue', color: '#8B0000' },
-		440: { text: 'Oper Absence', color: '#FF410C' },
-		500: { text: 'No Connection', color: '#A9A9A9' },
-	};
-
-	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>Machine Real-Time Status</Text>
-			<Text style={styles.clock}>{clock}</Text>
-			<Table borderStyle={{ borderWidth: 1, borderColor: '#c8e1ff' }}>
-				<Row
-					data={['', 'Machine', 'Line', 'Status', 'Since', 'Count']}
-					style={styles.head}
-					textStyle={styles.text}
-					widthArr={widthArr}
-				/>
-				{tableData.map((rowData, index) => {
-					const rowBackgroundColor = rowData.animatedValue.interpolate({
-						inputRange: [0, 1],
-						outputRange: ['transparent', '#FFFF99'],
-					});
-
-					return (
-						<Animated.View
-							key={index}
-							style={{ backgroundColor: rowBackgroundColor }}
-						>
-							<Row
-								data={[
-									// Status circle
-									<View
-										style={[
-											styles.statusCircle,
-											{
-												backgroundColor:
-													statusDefinitions[rowData.status]?.color || '#A9A9A9',
-											},
-										]}
-									/>,
-									rowData.machine,
-									rowData.line,
-									// Status text with color
-									<Text
-										style={{
-											color: statusDefinitions[rowData.status]?.color,
-										}}
-									>
-										{statusDefinitions[rowData.status]?.text || 'Unknown'}
-									</Text>,
-									rowData.since,
-									rowData.count || 'N/A',
-								]}
-								textStyle={styles.text}
-								widthArr={widthArr}
-							/>
-						</Animated.View>
-					);
-				})}
-			</Table>
-		</View>
-	);
-};
-
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: '#1e1e1e', // Dark theme
-		padding: 16,
-		paddingTop: 30,
-	},
-	title: {
-		fontSize: 24,
-		fontWeight: 'bold',
-		color: '#ffffff',
-		textAlign: 'center',
-		marginBottom: 10,
-	},
-	clock: {
-		color: '#ffffff',
-		fontSize: 18,
-		position: 'absolute',
-		top: 10,
-		right: 10,
-	},
-	head: {
-		height: 40,
-		backgroundColor: '#333333',
-	},
-	text: {
-		color: '#ffffff',
-		textAlign: 'center',
-	},
-	statusCircle: {
-		width: 20,
-		height: 20,
-		borderRadius: 10,
-		margin: 6,
-	},
-});
-
-export default MachineScreen;
+// 1.4 Data of Output	
+const message4 = {
+	queryName: 'stationQty',
+	params: { "orderId": route.params.scannedData, "station": station, "type": "input" }
+}
+const result4 = await axios.post('http://192.168.1.43:5011/query', message4);
+if (result4 && result4.data) {
+	console.log("Query result:", result4.data);
+	if (result4.data == []) setOutgoingQty(0);
+	else setOutgoingQty(result4.data[0][0]); // ระวังเรื่อง row = 0 ด้วย
+}

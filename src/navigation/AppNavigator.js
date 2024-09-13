@@ -2,6 +2,8 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer } from '@react-navigation/native';
+import { NavigationProvider } from '../context/NavigationContext';  // Context
+
 import HomeScreen from '../screens/HomeScreen';
 import ProductionScreen from '../screens/ProductionScreen';
 import ScannerScreen from '../screens/ScannerScreen';
@@ -56,11 +58,13 @@ function MainTabNavigator() {
 
 export default function AppNavigator() {
 	return (
-		<NavigationContainer>
-			<Stack.Navigator>
-				<Stack.Screen name="Main" component={MainTabNavigator} options={{ headerShown: false }} />
-				<Stack.Screen name="Camera" component={CameraScreen} options={{ headerShown: false }} />
-			</Stack.Navigator>
-		</NavigationContainer>
+		<NavigationProvider>
+			<NavigationContainer>
+				<Stack.Navigator>
+					<Stack.Screen name="Main" component={MainTabNavigator} options={{ headerShown: false }} />
+					<Stack.Screen name="Camera" component={CameraScreen} options={{ headerShown: false }} />
+				</Stack.Navigator>
+			</NavigationContainer>
+		</NavigationProvider>
 	);
 }

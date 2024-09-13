@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react'; // System
+import { useNavigationContext } from '../context/NavigationContext';
+import { useNavigation, useIsFocused } from '@react-navigation/native'; // View
+
 import { View, Text, StyleSheet, Dimensions, Animated, ScrollView } from 'react-native';
 import io from 'socket.io-client';
 import { Table, Row, Rows } from 'react-native-table-component';
@@ -11,6 +14,13 @@ const MachineScreen = () => {
 	const [clock, setClock] = useState('');
 	const [animatedValue] = useState(new Animated.Value(0));
 	const [inited, setInited] = useState(false);
+
+	const isFocused = useIsFocused();
+	const { navigationParams, setNavigationParams } = useNavigationContext();
+
+	useEffect(() => {
+		setNavigationParams({ scannedData: '', source: '' });
+	}, [isFocused]);
 
 	useEffect(() => {
 		// Initialize WebSocket connection
