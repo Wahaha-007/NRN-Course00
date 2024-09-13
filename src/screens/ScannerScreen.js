@@ -25,19 +25,15 @@ export default function ScannerScreen({ route }) {
 	const [model, setModel] = useState('');
 	const [incomingQty, setIncomingQty] = useState(0);
 	const [outgoingQty, setOutgoingQty] = useState(0);
-
 	const [stlist, setStlist] = useState([]);
 
-	const [responseData, setResponseData] = useState(null);
+	const [isBoxInEnabled, setIsBoxInEnabled] = useState(false);
+	const [isBoxOutEnabled, setIsBoxOutEnabled] = useState(false);
+	const [maxBoxInValue, setMaxBoxInValue] = useState(0);
+	const [maxBoxOutValue, setMaxBoxOutValue] = useState(0);
 
 	const navigation = useNavigation();
 	const isFocused = useIsFocused();
-
-	const isBox1Enabled = true; // Set to true/false to enable or disable box 1
-	const isBox2Enabled = false; // Set to true/false to enable or disable box 2
-
-	const maxBox1Value = 300; // Max value for box 1
-	const maxBox2Value = 300; // Max value for box 2
 
 	//1. ========================== Machine Station Menu ==============================
 	// ตอนสร้างหน้าครั้งแรก, อย่าตกใจที่ดูยาวๆ เพราะมัน return async แถมยังเก็บตัว data จริงไว้ใน result.data อีก
@@ -138,6 +134,12 @@ export default function ScannerScreen({ route }) {
 									else setOutgoingQty(result4.data[0][0]); // ระวังเรื่อง row = 0 ด้วย
 								}
 
+								setIsBoxInEnabled(true); // Set to true/false to enable or disable Incoming box
+								setIsBoxOutEnabled(true); // Set to true/false to enable or disable Outgoing box
+
+								setMaxBoxInValue(result3.data[0][0]); // ห้ามเอาพวก State Var มาใช้งานพร่ำเพื่อ นอกจากแสดงผล กับ update ตัวมันเอง
+								setMaxBoxOutValue(result4.data[0][0]);
+
 							} else {// ดูจากข้อมูล machine นี้ ไม่ต้องการ lot นี้
 
 								setOrderId('- Invalid Lot -');
@@ -146,6 +148,11 @@ export default function ScannerScreen({ route }) {
 								setCustomer('-');
 								setIncomingQty(0);
 								setOutgoingQty(0);
+								setIsBoxInEnabled(false); // Set to true/false to enable or disable Incoming box
+								setIsBoxOutEnabled(false); // Set to true/false to enable or disable Outgoing box
+
+								setMaxBoxInValue(0); // Max value for Incoming
+								setMaxBoxOutValue(0); // Max value for Outgoing
 							}
 						}
 					} catch (error) {
@@ -165,55 +172,261 @@ export default function ScannerScreen({ route }) {
 		}
 	}, [isFocused]); //, 
 
-	// 3. ========================= In/Out button ===============================
+	// 3. ========================= In/Out Textbox ===============================
 
 	const handleIncomingChange = (value) => {
 		const numericValue = parseInt(value, 10);
-		if (numericValue <= maxBox1Value) {
-			setIncomingQty(numericValue);
-		} else {
-			setIncomingQty(maxBox1Value); // If input exceeds max, set it to max value
+		if (!isNaN(numericValue)) {
+			if (numericValue <= maxBoxInValue) {
+				setIncomingQty(numericValue);
+			} else {
+				setIncomingQty(maxBoxInValue);
+			}
 		}
 	};
 
 	const handleOutgoingChange = (value) => {
+		console.log("Call handleOutgoingChange");
 		const numericValue = parseInt(value, 10);
-		if (numericValue <= maxBox2Value) {
-			setOutgoingQty(numericValue);
-		} else {
-			setOutgoingQty(maxBox2Value);
+		if (!isNaN(numericValue)) {
+			if (numericValue <= maxBoxOutValue) {
+				setOutgoingQty(numericValue);
+			} else {
+				setOutgoingQty(maxBoxOutValue);
+			}
 		}
 	};
 
+	// 4. ========================= Input button ===============================
+
 	const inButton = () => {
 
+		const fetchData = async () => {
+			try {
+
+				let inQty = 0;
+				let inCumQty = 0;
+				let prevStation = '';
+				let prevOutQty = 0;
+				let prevOutCumQty = 0;
+
+				// ----- 4.1 จำนวนที่รับเข้ามาแล้ว
+				const message1 = {
+					queryName: 'stationQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"type": "input"
+					}
+				}
+				const result1 = await axios.post('http://192.168.1.43:5011/query', message1);
+
+				if (result1 && result1.data) { // ถ้าส่งอะไรกลับมาแสดงว่า Server connection ไม่มีปัญหา
+
+					if (result1.data.length == 0) {
+						inQty = 0;
+						inCumQty = 0;
+					}
+					else {
+						inQty = result1.data[0][0];
+						inCumQty = result1.data[0][1];
+					}
+				}
+
+				// ------ 4.2 ชื่อและจำนวนที่ส่งออกแล้วจากเครื่องก่อน
+
+				const message2 = {
+					queryName: 'previousStation',
+					params: {
+						"nextStation": station,
+						"productModel": model,
+						"productName": product
+					}
+				}
+				const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
+
+				if (result2 && result2.data)
+
+					prevStation = result2.data[0][0];
+
+				const message3 = {
+					queryName: 'stationQty',
+					params: {
+						"orderId": orderId,
+						"station": prevStation,
+						"type": "output"
+					}
+				}
+				const result3 = await axios.post('http://192.168.1.43:5011/query', message3);
+
+				if (result3 && result3.data) {
+					prevOutQty = result3.data[0][0];
+					prevOutCumQty = result3.data[0][1];
+				}
+
+				// ------ 4.4 อัพเดตเพิ่มจำนวนของเครื่องปัจจุบัน (เพราะกดรับเข้ามาแล้วนี่)
+
+				let totalInput = inQty + incomingQty;
+				let totalCumInput = inCumQty + incomingQty;
+
+				const message4 = {
+					queryName: 'writeUpdateQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"nextStation": null,
+						"qty": totalInput,
+						"cum_qty": totalCumInput,
+						"type": "input"
+					}
+				}
+				const result4 = await axios.post('http://192.168.1.43:5011/query', message4);
+
+				// ------ 4.5 อัพเดตลดจำนวนของเครื่องก่อน (เพราะถูกดูดมา)
+
+				let totalPrevOutput = prevOutQty - incomingQty; // Cum อันก่อนไม่เปลี่ยน เพราะ Cum นับเฉพาะตอนใส่เข้ามา
+
+				const message5 = {
+					queryName: 'writeUpdateQty',
+					params: {
+						"orderId": orderId,
+						"station": prevStation,
+						"nextStation": station,
+						"qty": totalPrevOutput,
+						"cum_qty": prevOutCumQty,
+						"type": "output"
+					}
+				}
+				const result5 = await axios.post('http://192.168.1.43:5011/query', message5);
+
+			} catch (error) {
+				console.error(error);
+				Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
+			}
+		};
+
+		fetchData(scannedData);
 	};
+
+	// 5. ========================= Output button ===============================
 
 	const outButton = () => {
 
+		const fetchData = async () => {
+			try {
+
+				let inQty = 0;
+				let inCumQty = 0;
+				let nextStation = '';
+				let prevOutQty = 0;
+				let prevOutCumQty = 0;
+
+				// ----- 5.1 จำนวนที่ส่งออกไปแล้ว
+				const message1 = {
+					queryName: 'stationQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"type": "output"
+					}
+				}
+				const result1 = await axios.post('http://192.168.1.43:5011/query', message1);
+
+				if (result1 && result1.data) { // ถ้าส่งอะไรกลับมาแสดงว่า Server connection ไม่มีปัญหา
+
+					if (result1.data.length == 0) {
+						outQty = 0;
+						outCumQty = 0;
+					}
+					else {
+						outQty = result1.data[0][0];
+						outCumQty = result1.data[0][1];
+					}
+				}
+
+				// ------ 5.2 ชื่อของเครื่องถัดไป
+
+				const message2 = {
+					queryName: 'nextStation',
+					params: {
+						"station": station,
+						"productModel": model,
+						"productName": product
+					}
+				}
+				const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
+
+				if (result2.data.length == 0) {
+					nextStation = null;
+				}
+				else {
+					nextStation = result2.data[0][0];
+				}
+
+				// ------ 5.3 จำนวนที่รับเข้ามาแล้วของเครื่องนี้ 
+
+				const message3 = {
+					queryName: 'stationQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"type": "input"
+					}
+				}
+				const result3 = await axios.post('http://192.168.1.43:5011/query', message3);
+
+				if (result3.data.length == 0) {
+					inQty = 0;
+					inCumQty = 0;
+				}
+				else {
+					inQty = result3.data[0][0];
+					inCumQty = result3.data[0][1];
+				}
+
+				// ------ 5.4 อัพเดตเพิ่มจำนวนออกของเครื่องปัจจุบัน (ออกไปเป็น queue)
+
+				let totalOutput = outQty + outgoingQty;
+				let totalCumOutput = outCumQty + outgoingQty;
+
+				const message4 = {
+					queryName: 'writeUpdateQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"nextStation": nextStation,
+						"qty": totalOutput,
+						"cum_qty": totalCumOutput,
+						"type": "output"
+					}
+				}
+				const result4 = await axios.post('http://192.168.1.43:5011/query', message4);
+
+				// ------ 5.5 อัพเดตลดจำนวนของเครื่องนี้ (เพราะเพิ่งส่งออกไป)
+
+				let totalInput = inQty - outgoingQty; // Cum อันก่อนไม่เปลี่ยน เพราะ Cum นับเฉพาะตอนใส่เข้ามา
+
+				const message5 = {
+					queryName: 'writeUpdateQty',
+					params: {
+						"orderId": orderId,
+						"station": station,
+						"nextStation": null,
+						"qty": totalInput,
+						"cum_qty": inCumQty,
+						"type": "input"
+					}
+				}
+				const result5 = await axios.post('http://192.168.1.43:5011/query', message5);
+
+			} catch (error) {
+				console.error(error);
+				Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
+			}
+		};
+
+		fetchData(scannedData);
 	};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 	// 4. ========================== GUI Section ===============================
 	return (
@@ -222,7 +435,7 @@ export default function ScannerScreen({ route }) {
 			<KeyboardAwareScrollView
 				contentContainerStyle={styles.container}
 				enableOnAndroid={true} // This ensures it works on Android as well
-				extraHeight={450} // Adjust this height if necessary
+				extraHeight={150} // Adjust this height if necessary
 				keyboardOpeningTime={0} // Helps with Android
 			>
 				<Card style={styles.card}>
@@ -258,18 +471,16 @@ export default function ScannerScreen({ route }) {
 								style={styles.input}
 								value={incomingQty.toString()} // Convert numeric value to string for TextInput
 								onChangeText={setIncomingQty} // Function to handle value change
-								editable={isBox1Enabled} // Enable/disable based on variable
+								editable={isBoxInEnabled} // Enable/disable based on variable
 								keyboardType="numeric" // Numeric keyboard
-								maxLength={maxBox1Value.toString().length} // Maximum length based on the max value
 								onEndEditing={(e) => handleIncomingChange(e.nativeEvent.text)} // To handle max value enforcement
 							/>
 							<TextInput
 								style={styles.input}
 								value={outgoingQty.toString()}
 								onChangeText={setOutgoingQty}
-								editable={isBox2Enabled}
+								editable={isBoxOutEnabled}
 								keyboardType="numeric"
-								maxLength={maxBox2Value.toString().length}
 								onEndEditing={(e) => handleOutgoingChange(e.nativeEvent.text)}
 							/>
 						</View>
@@ -292,7 +503,7 @@ export default function ScannerScreen({ route }) {
 
 const styles = StyleSheet.create({
 	container: {
-		flex: 1,
+		flexGrow: 1,
 		backgroundColor: '#000',
 		padding: 8
 	},
