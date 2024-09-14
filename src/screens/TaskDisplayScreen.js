@@ -6,74 +6,86 @@ import axios from 'axios'; // Background Task
 
 export default function TaskDisplayScreen() {
 
-	const [curstation, setCurstation] = useState(''); // ใส่ว่างๆ ไว้ตอนเจออะไรครั้งแรกจะได้โหลดเลย
+	const [pageStation, setPageStation] = useState(''); // ใส่ว่างๆ ไว้ตอนเจออะไรครั้งแรกจะได้โหลดเลย
 	const isFocused = useIsFocused();
 	const { navigationParams, setNavigationParams } = useNavigationContext();
-	const { station } = navigationParams;
+	const { station, TaskNeedUpdate } = navigationParams;
 	const [waitingData, setWaitingData] = useState();
 	const [processingData, setProcessingData] = useState();
 
 	useEffect(() => {
-		if (isFocused && station != curstation && station != undefined) {
-			console.log("New station detect :", station);
-			setCurstation(station);
+		if (isFocused) {
 
-			const fetchData = async () => {
-				try {
+			// 1. Update เมื่อมีการเปลี่ยน Station (ที่หน้า Scaner)
+			if (station != pageStation && station != undefined) {
+				setPageStation(station);
 
-					// --- Upper table : xxx Waiting ---
-					const message1 = {
-						queryName: 'waitingIncoming',
-						params: { "nextStation": station } // ค่าใหม่จาก Context สดๆ ร้อนๆ
+				const fetchData = async () => {
+					try {
+
+						// --- Upper table : xxx Waiting ---
+						const message1 = {
+							queryName: 'waitingIncoming',
+							params: { "nextStation": station } // ค่าใหม่จาก Context สดๆ ร้อนๆ
+						}
+
+						const result1 = await axios.post('http://192.168.1.43:5011/query', message1);
+						if (result1 && result1.data) {
+							console.log("Query result:", result1.data);
+							setWaitingData(result1.data);
+						}
+
+						// --- Lower table : xxx Processing ---
+						const message2 = {
+							queryName: 'orderprocessingInStation',
+							params: { "station": station } // ค่าใหม่จาก Context สดๆ ร้อนๆ
+						}
+
+						const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
+						if (result2 && result2.data) {
+							console.log("Query result:", result2.data);
+							setProcessingData(result2.data);
+						}
+
+					} catch (error) {
+						console.error(error);
+						Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
 					}
-
-					const result1 = await axios.post('http://192.168.1.43:5011/query', message1);
-					if (result1 && result1.data) {
-						console.log("Query result:", result1.data);
-						setWaitingData(result1.data);
-					}
-
-					// --- Lower table : xxx Processing ---
-					const message2 = {
-						queryName: 'orderprocessingInStation',
-						params: { "station": station } // ค่าใหม่จาก Context สดๆ ร้อนๆ
-					}
-
-					const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
-					if (result2 && result2.data) {
-						console.log("Query result:", result2.data);
-						setProcessingData(result2.data);
-					}
-
-				} catch (error) {
-					console.error(error);
-					Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
 				}
-			};
-			fetchData();
+				fetchData();
+			}
 
+			// 2. Update เมื่อมีการเปลี่ยนจำนวน Breakage (ที่หน้า Breakage)
+			if (TaskNeedUpdate) {
+				const fetchData = async () => {
+					try {
+
+						// --- Lower table : xxx Processing ---
+						const message2 = {
+							queryName: 'orderprocessingInStation',
+							params: { "station": station } // ค่าใหม่จาก Context สดๆ ร้อนๆ
+						}
+
+						const result2 = await axios.post('http://192.168.1.43:5011/query', message2);
+						if (result2 && result2.data) {
+							console.log("Query result:", result2.data);
+							setProcessingData(result2.data);
+						}
+
+					} catch (error) {
+						console.error(error);
+						Alert.alert('Error', 'Something went wrong. Please check your input or try again later.');
+					}
+				}
+				fetchData();
+
+				setNavigationParams(prev => ({ ...prev, TaskNeedUpdate: false }));
+			}
 			setNavigationParams(prev => ({ ...prev, latestPage: 'TaskDisplay' }));
 		}
+
+
 	}, [isFocused]);
-
-
-	// // Mock data provider for the 'up table'
-	// const getUpTableData = () => {
-	// 	return [
-	// 		['1001', 'Station A', 5],
-	// 		['1002', 'Station B', 10],
-	// 		['1003', 'Station C', 7],
-	// 	]; // 2D array format
-	// };
-
-	// // Mock data provider for the 'down table' (2D array)
-	// const getDownTableData = () => {
-	// 	return [
-	// 		['1001', 8, 2],
-	// 		['1002', 15, 0],
-	// 		['1003', 9, 1],
-	// 	]; // 2D array format
-	// };
 
 	// Get data from mock data providers
 	const upTableData = waitingData;
@@ -104,9 +116,12 @@ export default function TaskDisplayScreen() {
 	return (
 		<View style={styles.container}>
 			<View style={styles.card}>
+				<Text style={styles.stationText}>{`Station: ${station}`}</Text>
 				{/* Upper Section */}
 				<View style={styles.section}>
-					<Text style={styles.sectionText}>{var1} Waiting</Text>
+					<Text style={styles.sectionText}>
+						<Text style={styles.var1Text}>{var1}</Text> Waiting
+					</Text>
 					{/* 'Up Table' */}
 					<View style={styles.tableContainer}>
 						<View style={styles.tableHeader}>
@@ -124,7 +139,9 @@ export default function TaskDisplayScreen() {
 
 				{/* Lower Section */}
 				<View style={styles.section}>
-					<Text style={styles.sectionText}>{var2} Processing</Text>
+					<Text style={styles.sectionText}>
+						<Text style={styles.var2Text}>{var2}</Text> Processing
+					</Text>
 					{/* 'Down Table' */}
 					<View style={styles.tableContainer}>
 						<View style={styles.tableHeader}>
@@ -156,7 +173,12 @@ const styles = StyleSheet.create({
 		flex: 1,
 		backgroundColor: '#222',
 		borderRadius: 8,
-		padding: 5,
+		padding: 10,
+		marginBottom: 5,
+	},
+	stationText: {
+		fontSize: 22,
+		color: '#fff',
 		marginBottom: 5,
 	},
 	section: {
@@ -170,10 +192,19 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		marginBottom: 10,
 	},
+	var1Text: {
+		color: '#00A0E9', // Sky Blue
+		fontSize: 24,
+	},
+	var2Text: {
+		color: '#82d47b', // Lemon Green
+		fontSize: 24,
+	},
 	tableContainer: {
 		flex: 1,
 		borderWidth: 1,
 		borderColor: '#fff', // White borders for visibility
+		borderRadius: 10,
 	},
 	tableHeader: {
 		flexDirection: 'row',
@@ -186,6 +217,7 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		padding: 5,
 		fontWeight: 'bold',
+		fontSize: 18,
 	},
 	tableRow: {
 		flexDirection: 'row',
@@ -196,7 +228,9 @@ const styles = StyleSheet.create({
 		flex: 1,
 		color: '#fff',
 		textAlign: 'center',
+		fontSize: 16,
 		padding: 5,
 	},
+
 });
 
