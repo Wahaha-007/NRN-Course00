@@ -4,9 +4,8 @@
 import React, { useState, useEffect, useContext } from 'react'; // System
 import { useNavigationContext } from '../context/NavigationContext';
 
-import { Button, View, Text, StyleSheet, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { Button, View, Text, StyleSheet, Alert, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native'; // View
-import { Provider as PaperProvider, Card } from 'react-native-paper';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import RNPickerSelect from 'react-native-picker-select';
 
@@ -500,28 +499,32 @@ export default function ScannerScreen({ route }) {
 	// 4. ========================== GUI Section ===============================
 	return (
 
-		<PaperProvider>
-			<KeyboardAwareScrollView
-				contentContainerStyle={styles.container}
-				enableOnAndroid={true} // This ensures it works on Android as well
-				extraHeight={150} // Adjust this height if necessary
-				keyboardOpeningTime={0} // Helps with Android
-			>
-				<Card style={styles.card}>
-					<Card.Content>
-						<Text style={styles.label}>Station:</Text>
-						<RNPickerSelect
-							onValueChange={(value) => setStation(value)}
-							items={stlist}
-							value={station}
-							style={pickerSelectStyles}
-							placeholder={{ label: 'Select station', value: null }}
-						/>
 
-						<View style={styles.buttonContainerup}>
-							<Button title="Scan Runcard" onPress={openScanner} color="#666" />
-						</View>
+		<KeyboardAwareScrollView
+			contentContainerStyle={styles.container}
+			extraHeight={150} // Adjust this height if necessary
+			resetScrollToCoords={{ x: 0, y: 0 }}
+			enableAutomaticScroll={true}
+		>
+			<View style={styles.container}>
+				<View style={styles.card}>
+					{/* Station dropdown */}
+					<Text style={styles.label}>Station:</Text>
+					<RNPickerSelect
+						onValueChange={(value) => setStation(value)}
+						items={stlist}
+						value={station}
+						style={pickerSelectStyles}
+						placeholder={{ label: 'Select station', value: null }}
+					/>
 
+					{/* Scan Runcard button */}
+					<TouchableOpacity style={styles.scanButton}>
+						<Text style={styles.scanButtonText} onPress={openScanner}>Scan Runcard</Text>
+					</TouchableOpacity>
+
+					{/* Display fields for orderID, customer, product, model */}
+					<View style={styles.displayContainer}>
 						<Text style={styles.label}>Order ID:</Text>
 						<Text style={styles.displayText}>{orderId}</Text>
 
@@ -533,104 +536,125 @@ export default function ScannerScreen({ route }) {
 
 						<Text style={styles.label}>Model:</Text>
 						<Text style={styles.displayText}>{model}</Text>
+					</View>
 
-						{/* Upper Row with Two Boxes */}
-						<View style={styles.row}>
-							<TextInput
-								style={styles.input}
-								value={incomingQty.toString()} // Convert numeric value to string for TextInput
-								onChangeText={setIncomingQty} // Function to handle value change
-								editable={isBoxInEnabled} // Enable/disable based on variable
-								keyboardType="numeric" // Numeric keyboard
-								onEndEditing={(e) => handleIncomingChange(e.nativeEvent.text)} // To handle max value enforcement
-							/>
-							<TextInput
-								style={styles.input}
-								value={outgoingQty.toString()}
-								onChangeText={setOutgoingQty}
-								editable={isBoxOutEnabled}
-								keyboardType="numeric"
-								onEndEditing={(e) => handleOutgoingChange(e.nativeEvent.text)}
-							/>
-						</View>
-
-						{/* Lower Row with Two Buttons */}
-						<View style={styles.row}>
-							<View style={styles.buttonContainer}>
-								<Button title="In" onPress={inButton} color="#666" />
-							</View>
-							<View style={styles.buttonContainer}>
-								<Button title="Out" onPress={outButton} color="#666" />
-							</View>
-						</View>
-					</Card.Content>
-				</Card>
-			</KeyboardAwareScrollView>
-		</PaperProvider>
+					{/* In and Out numerical input */}
+					<View style={styles.inputContainer}>
+						<TextInput
+							style={styles.numInput}
+							value={incomingQty.toString()} // Convert numeric value to string for TextInput
+							onChangeText={setIncomingQty} // Function to handle value change
+							editable={isBoxInEnabled} // Enable/disable based on variable
+							keyboardType="numeric" // Numeric keyboard
+							onEndEditing={(e) => handleIncomingChange(e.nativeEvent.text)} // To handle max value enforcement
+						/>
+						<TextInput
+							style={styles.numInput}
+							value={outgoingQty.toString()}
+							onChangeText={setOutgoingQty}
+							editable={isBoxOutEnabled}
+							keyboardType="numeric"
+							onEndEditing={(e) => handleOutgoingChange(e.nativeEvent.text)}
+						/>
+					</View>
+					{/* In and Out buttons */}
+					<View style={styles.buttonContainer}>
+						<TouchableOpacity style={styles.inButton}>
+							<Text style={styles.buttonText} onPress={inButton} >In</Text>
+						</TouchableOpacity>
+						<TouchableOpacity style={styles.outButton}>
+							<Text style={styles.buttonText} onPress={outButton}>Out</Text>
+						</TouchableOpacity>
+					</View>
+				</View>
+			</View>
+		</KeyboardAwareScrollView>
 	);
 }
 
 const styles = StyleSheet.create({
 	container: {
 		flexGrow: 1,
-		backgroundColor: '#000',
-		padding: 8
+		backgroundColor: '#121212',
+		padding: 5,
 	},
 	card: {
+		flex: 1,
 		backgroundColor: '#222',
 		borderRadius: 8,
-		padding: 0,
+		padding: 20,
 		marginBottom: 5,
 	},
 	label: {
-		color: '#fff',
-		fontSize: 16,
-		marginVertical: 8,
+		color: '#FFFFFF',
+		fontSize: 18,
+		marginBottom: 5,
+	},
+	scanButton: {
+		backgroundColor: '#2196F3',
+		paddingVertical: 15,
+		borderRadius: 5,
+		marginTop: 10,
+		marginBottom: 10,
+		alignItems: 'center',
+		justifyContent: 'center',
+		height: 80,
+	},
+	scanButtonText: {
+		color: '#FFFFFF',
+		fontSize: 24,
+		textAlign: 'center',
+	},
+	displayContainer: {
+		marginBottom: 20,
 	},
 	displayText: {
 		color: '#ebda7c', // Somewhat yellow
-		fontSize: 24,
+		fontSize: 20,
 		marginBottom: 10,
 	},
-	row: {
+	inputContainer: {
 		flexDirection: 'row',
 		justifyContent: 'space-between',
-		marginBottom: 10, // Space between rows
+		marginBottom: 20,
 	},
-	box: {
-		flex: 2,
-		height: 50,
+	numInput: {
+		flex: 1,
 		borderWidth: 1,
-		borderColor: '#ddd',
-		marginHorizontal: 8,
-		alignItems: 'center',
-		justifyContent: 'center',
-		borderRadius: 10,
-		backgroundColor: '#f5f5f5',
-	},
-	boxText: {
-		fontSize: 32,
-		fontWeight: 'bold',
-	},
-	buttonContainerup: {
-		marginTop: 10,
-		height: 40,
+		borderColor: '#FFFFFF',
+		backgroundColor: '#1E1E1E',
+		color: '#FFFFFF',
+		paddingHorizontal: 10,
+		paddingVertical: 10,
+		borderRadius: 5,
+		marginRight: 5,
+		marginLeft: 5,
+		textAlign: 'center',
+		fontSize: 24,
 	},
 	buttonContainer: {
-		flex: 1,
-		marginHorizontal: 8,
+		flexDirection: 'row',
+		justifyContent: 'space-between',
 	},
-	input: {
+	inButton: {
 		flex: 1,
-		height: 60, // Adjust height as needed
-		borderWidth: 1,
-		borderColor: '#ddd',
-		margin: 10,
-		borderRadius: 10,
-		paddingHorizontal: 10,
-		fontSize: 20,
-		textAlign: 'center', // Center the numeric input text
-		color: '#fff',
+		backgroundColor: '#2196F3',
+		width: 140,
+		paddingVertical: 15,
+		borderRadius: 5,
+		marginRight: 10,
+	},
+	outButton: {
+		flex: 1,
+		backgroundColor: '#2196F3',
+		width: 140,
+		paddingVertical: 15,
+		borderRadius: 5,
+	},
+	buttonText: {
+		color: '#FFFFFF',
+		fontSize: 22,
+		textAlign: 'center',
 	},
 });
 
